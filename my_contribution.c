@@ -1,4 +1,4 @@
-// 3. SRTF (Preemptive SJF)
+// SRTF 
 void srtf(Process p[], int n) {
     int time = 0, done = 0;
     for (int i = 0; i < n; i++) p[i].remaining = p[i].burst;
