@@ -1,25 +1,21 @@
-// SRTF 
-void srtf(Process p[], int n) {
+// SJF 
+void sjf(Process p[], int n) {
     int time = 0, done = 0;
-    for (int i = 0; i < n; i++) p[i].remaining = p[i].burst;
-
+    int completed[MAX] = {0};
     while (done < n) {
-        int idx = -1, minRT = 1e9;
+        int idx = -1, minBT = INT_MAX;
         for (int i = 0; i < n; i++) {
-            if (p[i].arrival <= time && p[i].remaining > 0 && p[i].remaining < minRT) {
-                minRT = p[i].remaining;
+            if (!completed[i] && p[i].arrival <= time && p[i].burst < minBT) {
+                minBT = p[i].burst;
                 idx = i;
             }
         }
         if (idx == -1) { time++; continue; }
-
-        p[idx].remaining--;
-        time++;
-        if (p[idx].remaining == 0) {
-            done++;
-            p[idx].turnaround = time - p[idx].arrival;
-            p[idx].waiting = p[idx].turnaround - p[idx].burst;
-        }
+        p[idx].waiting = time - p[idx].arrival;
+        time += p[idx].burst;
+        p[idx].turnaround = p[idx].waiting + p[idx].burst;
+        completed[idx] = 1;
+        done++;
     }
     printResults(p, n);
 }
