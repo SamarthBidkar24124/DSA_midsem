@@ -1,21 +1,23 @@
-// SJF 
-void sjf(Process p[], int n) {
-    int time = 0, done = 0;
-    int completed[MAX] = {0};
+void sjf(Process *orig) {
+    Process *p = cloneList(orig);
+    int n = countList(p), done = 0;
+    int time = minArrival(p);
     while (done < n) {
-        int idx = -1, minBT = INT_MAX;
-        for (int i = 0; i < n; i++) {
-            if (!completed[i] && p[i].arrival <= time && p[i].burst < minBT) {
-                minBT = p[i].burst;
-                idx = i;
+        Process *best = NULL, *it = p;
+        while (it) {
+            if (!it->completed && it->arrival <= time) {
+                if (!best || it->burst < best->burst || (it->burst == best->burst && it->arrival < best->arrival))
+                    best = it;
             }
+            it = it->next;
         }
-        if (idx == -1) { time++; continue; }
-        p[idx].waiting = time - p[idx].arrival;
-        time += p[idx].burst;
-        p[idx].turnaround = p[idx].waiting + p[idx].burst;
-        completed[idx] = 1;
-        done++;
+        if (!best) { time++; continue; }
+        best->waiting = time - best->arrival;
+        time += best->burst;
+        best->turnaround = best->waiting + best->burst;
+        best->completed = 1; done++;
     }
-    printResults(p, n);
+    printf("\n--- SJF Results ---\n");
+    printResults(p);
+    freeList(p);
 }
