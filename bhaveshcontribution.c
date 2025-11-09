@@ -1,21 +1,24 @@
-//Priority Scheduling (Non-preemptive)
-void priorityScheduling(Process p[], int n) {
-    int time = 0, done = 0;
-    int completed[MAX] = {0};
+/* 5) Priority Scheduling (non-preemptive) */
+void priorityScheduling(Process *orig) {
+    Process *p = cloneList(orig);
+    int n = countList(p), done = 0;
+    int time = minArrival(p);
     while (done < n) {
-        int idx = -1, bestPri = 1e9;
-        for (int i = 0; i < n; i++) {
-            if (!completed[i] && p[i].arrival <= time && p[i].priority < bestPri) {
-                bestPri = p[i].priority;
-                idx = i;
+        Process *best = NULL, *it = p;
+        while (it) {
+            if (!it->completed && it->arrival <= time) {
+                if (!best || it->priority < best->priority || (it->priority == best->priority && it->arrival < best->arrival))
+                    best = it;
             }
+            it = it->next;
         }
-        if (idx == -1) { time++; continue; }
-        p[idx].waiting = time - p[idx].arrival;
-        time += p[idx].burst;
-        p[idx].turnaround = p[idx].waiting + p[idx].burst;
-        completed[idx] = 1;
-        done++;
+        if (!best) { time++; continue; }
+        best->waiting = time - best->arrival;
+        time += best->burst;
+        best->turnaround = best->waiting + best->burst;
+        best->completed = 1; done++;
     }
-    printResults(p, n);
+    printf("\n--- Priority Scheduling Results ---\n");
+    printResults(p);
+    freeList(p);
 }
