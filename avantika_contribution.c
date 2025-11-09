@@ -1,84 +1,114 @@
-#include <stdio.h>
-#define MAX 20
-
-typedef struct {
-    int pid;
-    int arrival;
-    int burst;
-    int priority;
-    int waiting;
-    int turnaround;
-} Process;
-
-// Function to print results
-void printResults(Process p[], int n) {
-    float total_wait = 0, total_tat = 0;
-    printf("\nPID\tAT\tBT\tPRI\tWT\tTAT");
-    for (int i = 0; i < n; i++) {
-        printf("\nP%d\t%d\t%d\t%d\t%d\t%d",
-               p[i].pid, p[i].arrival, p[i].burst, p[i].priority,
-               p[i].waiting, p[i].turnaround);
-        total_wait += p[i].waiting;
-        total_tat += p[i].turnaround;
+// 6) Multilevel Queue
+void multilevelQueue(Process *orig, int tq) {
+    Process *p = cloneList(orig);
+    Process *q1 = NULL, *q2 = NULL;
+    int cutoff = 3; // priority <= cutoff -> q1 (higher priority)
+    Process *it = p;
+    while (it) {
+        if (it->priority <= cutoff) q1 = append(q1, newProc(it->pid, it->arrival, it->burst, it->priority));
+        else q2 = append(q2, newProc(it->pid, it->arrival, it->burst, it->priority));
+        it = it->next;
     }
-    printf("\n\nAverage Waiting Time: %.2f", total_wait / n);
-    printf("\nAverage Turnaround Time: %.2f\n", total_tat / n);
-}
 
-// Priority Scheduling (used for each queue)
-void priorityScheduling(Process p[], int n) {
-    int time = 0, done = 0;
-    int completed[MAX] = {0};
-    while (done < n) {
-        int idx = -1, bestPri = 1e9;
-        for (int i = 0; i < n; i++) {
-            if (!completed[i] && p[i].arrival <= time && p[i].priority < bestPri) {
-                bestPri = p[i].priority;
-                idx = i;
-            }
+    printf("\n--- Multilevel Queue: Queue1 (Priority) ---\n");
+    if (q1) priorityScheduling(q1); else printf("(empty)\n");
+    printf("\n--- Multilevel Queue: Queue2 (Round Robin) ---\n");
+    if (q2) roundRobin(q2, tq); else printf("(empty)\n");
+
+    freeList(p);
+    freeList(q1);
+    freeList(q2);
+}
+// 7) MLFQ: two-level multilevel feedback queue (L1 then L2)
+void mlfq(Process *orig, int tq1, int tq2) {
+    if (tq1 <= 0 || tq2 <= 0) { printf("Quanta must be > 0\n"); return; }
+    Process *p = cloneList(orig);
+    int n = countList(p), done = 0;
+    int time = minArrival(p);
+    Process *it = p;
+    while (it) { it->remaining = it->burst; it->completed = 0; it->inqueue = 0; it = it->next; }
+
+    Queue *L1 = createQ();
+    Queue *L2 = createQ();
+
+    it = p;
+    while (it) {
+        if (it->arrival <= time && it->remaining > 0) {
+            enqueue(L1, it);
+            it->inqueue = 1;
         }
-        if (idx == -1) { time++; continue; }
-        p[idx].waiting = time - p[idx].arrival;
-        time += p[idx].burst;
-        p[idx].turnaround = p[idx].waiting + p[idx].burst;
-        completed[idx] = 1;
-        done++;
-    }
-    printResults(p, n);
-}
-
-// Multilevel Queue Scheduling
-void multilevelQueue(Process p[], int n) {
-    Process q1[MAX], q2[MAX];
-    int n1 = 0, n2 = 0;
-
-    // Split processes into 2 queues based on PID (or any other logic)
-    for (int i = 0; i < n; i++) {
-        if (p[i].pid % 2 == 0) q1[n1++] = p[i]; // Queue 1
-        else q2[n2++] = p[i];                   // Queue 2
+        it = it->next;
     }
 
-    printf("\n--- Queue 1 (Priority Scheduling) ---\n");
-    priorityScheduling(q1, n1);
+    while (done < n) {
+        Process *cur = NULL;
+        int cameFrom = 0; // 1 -> L1, 2 -> L2
+        if (!qempty(L1)) { cur = dequeue(L1); cur->inqueue = 0; cameFrom = 1; }
+        else if (!qempty(L2)) { cur = dequeue(L2); cur->inqueue = 0; cameFrom = 2; }
+        else {
+            int nxt = INT_MAX;
+            it = p;
+            while (it) {
+                if (!it->completed && !it->inqueue && it->remaining > 0) {
+                   if (nxt == INT_MAX || it->arrival < nxt) nxt = it->arrival;
+                }
+                it = it->next;
+            }
+            if (nxt == INT_MAX) break;
+            
+            if (nxt > time) time = nxt;
+            else if (qempty(L1) && qempty(L2)) time = nxt; // Handle initial gap
+            else time++; 
 
-    printf("\n--- Queue 2 (Priority Scheduling) ---\n");
-    priorityScheduling(q2, n2);
-}
+            it = p;
+            while (it) {
+                if (!it->inqueue && it->arrival <= time && it->remaining > 0) {
+                    enqueue(L1, it);
+                    it->inqueue = 1;
+                }
+                it = it->next;
+            }
+            continue;
+        }
 
-int main() {
-    Process p[MAX];
-    int n;
+        int exec = 0;
+        if (cameFrom == 1) exec = (cur->remaining <= tq1) ? cur->remaining : tq1;
+        else exec = (cur->remaining <= tq2) ? cur->remaining : tq2;
 
-    printf("Enter number of processes: ");
-    scanf("%d", &n);
+        cur->remaining -= exec;
+        time += exec;
 
-    for (int i = 0; i < n; i++) {
-        p[i].pid = i + 1;
-        printf("Enter Arrival, Burst, Priority for P%d: ", i + 1);
-        scanf("%d %d %d", &p[i].arrival, &p[i].burst, &p[i].priority);
-        p[i].waiting = p[i].turnaround = 0;
+        if (cur->remaining > 0) {
+            if (cameFrom == 1 && exec == tq1) {
+                enqueue(L2, cur);
+                cur->inqueue = 1;
+            } else if (cameFrom == 1) { // Did not use full tq1
+                enqueue(L1, cur); 
+                cur->inqueue = 1;
+            } else { // cameFrom == 2
+                enqueue(L2, cur);
+                cur->inqueue = 1;
+            }
+        } else {
+            cur->completed = 1; done++;
+            cur->turnaround = time - cur->arrival;
+            cur->waiting = cur->turnaround - cur->burst;
+        }
+
+        it = p;
+        while (it) {
+            if (it != cur && !it->inqueue && it->arrival <= time && it->remaining > 0) {
+                enqueue(L1, it);
+                it->inqueue = 1;
+            }
+            it = it->next;
+        }
     }
 
-    multilevelQueue(p, n);
-    return 0;
+    printf("\n--- MLFQ Results (tq1=%d, tq2=%d) ---\n", tq1, tq2);
+    printResults(p);
+    freeList(p);
+    freeQ(L1);
+    freeQ(L2);
 }
+              
